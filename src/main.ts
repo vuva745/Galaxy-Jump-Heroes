@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { clamp, near2d } from './logic';
 import { showResults } from './leaderboard';
-import { Particles, Shake, box, flash, formatTime, glow, makeCanvasTexture, makeStars, mesh, rand, std } from './fx';
+import { Particles, Shake, Shockwaves, Tweens, box, easeInCubic, easeInOutSine, flash, formatTime, glow, makeCanvasTexture, makeStars, mesh, rand, std } from './fx';
 import { createPipeline, createRenderer } from './postfx';
 import { loadModel, recolor, swapModel } from './models';
 import { sfx } from './audio';
-import { bindMute, createInput, pulse, setBar, waitForStart } from './screen';
+import { announce, bindMute, createInput, floatText, pulse, setBar, toScreen, waitForStart } from './screen';
 import './style.css';
 
 const TOTAL = 15;
@@ -76,7 +76,7 @@ mesh(new THREE.SphereGeometry(10, 40, 28), planetMat(planetTexture('#ff9a3d', '#
 const moonlet = mesh(new THREE.SphereGeometry(4.5, 32, 24), planetMat(planetTexture('#4fd6c8', '#8af0e4', '#2a9a90'), 0x0f4a44), scene, 45, -12, -110, false);
 
 // ---------- Platforms & stars ----------
-interface Platform { group: THREE.Group; x: number; z: number; w: number; baseX: number; moving: boolean; phase: number; prevX: number }
+interface Platform { group: THREE.Group; x: number; z: number; w: number; baseX: number; moving: boolean; phase: number; prevX: number; dip: number }
 const platforms: Platform[] = [];
 const edgeMat = new THREE.LineBasicMaterial({ color: 0x9ad8ff });
 const hues = [0x5a4de0, 0x3f8ee8, 0x7b3fe8, 0x2fc6d8];
@@ -95,7 +95,7 @@ for (let i = 0; i < 22; i++) {
   if (moving) for (const tx of [-w / 3, w / 3]) mesh(new THREE.CylinderGeometry(0.25, 0.4, 0.5, 10), glow(0xffb84d, 3), group, tx, -1.1, 0, false);
   group.position.set(x, 0, z);
   scene.add(group);
-  platforms.push({ group, x, z, w, baseX: x, moving, phase: rand(0, 6), prevX: x });
+  platforms.push({ group, x, z, w, baseX: x, moving, phase: rand(0, 6), prevX: x, dip: 0 });
 }
 // Swap primitive platforms for the Blender-built deck once it loads.
 loadModel('platform')
@@ -166,6 +166,31 @@ const dust = new Particles(scene, 500, 0.35, 6);
 const jetTrail = new Particles(scene, 600, 0.3, -1);
 const sparkle = new Particles(scene, 500, 0.4, 1.5);
 const shake = new Shake();
+const tweens = new Tweens();
+const waves = new Shockwaves(scene, 10);
+let intro = 0, flip = 0, tumble = 0, roll = 0;
+const INTRO_SECONDS = 2.6;
+const astroVisual = (): THREE.Object3D | undefined => player.children.find((c) => c !== playerLight && !(jets as THREE.Object3D[]).includes(c));
+
+// Shooting stars streaking across the background
+interface Streak { mesh: THREE.Mesh; velocity: THREE.Vector3; life: number }
+const streaks: Streak[] = [];
+const streakMat = glow(0xffffff, 3, { transparent: true, opacity: 0.9 });
+for (let i = 0; i < 3; i++) {
+  const m = mesh(new THREE.BoxGeometry(0.12, 0.12, 7), streakMat, scene, 0, 0, 0, false);
+  m.visible = false;
+  streaks.push({ mesh: m, velocity: new THREE.Vector3(), life: 0 });
+}
+let streakTimer = 2;
+function launchStreak(): void {
+  const s = streaks.find((x) => x.life <= 0);
+  if (!s) return;
+  s.mesh.position.set(rand(-120, 120), rand(10, 70), player.position.z - rand(140, 220));
+  s.velocity.set(rand(-60, 60), rand(-40, -15), rand(-10, 10));
+  s.mesh.lookAt(s.mesh.position.clone().add(s.velocity));
+  s.life = 1.4;
+  s.mesh.visible = true;
+}
 
 // ---------- State ----------
 const held = createInput(['up', 'down', 'left', 'right', 'action'] as const, { ArrowUp: 'up', w: 'up', W: 'up', ArrowDown: 'down', s: 'down', S: 'down', ArrowLeft: 'left', a: 'left', A: 'left', ArrowRight: 'right', d: 'right', D: 'right', ' ': 'action', Enter: 'action' });
@@ -183,9 +208,32 @@ const hud = {
 
 function finish(won: boolean): void {
   ended = true;
-  jets.forEach((j) => (j.visible = false));
-  if (won) sfx.win(); else sfx.lose();
-  showResults(hud.message, { won, score: Math.min(score, TOTAL), goal: TOTAL, scoreLabel: 'Stars', durationMs: Math.round(performance.now() - startedAt), winTitle: '🏆 CONSTELLATION COMPLETE', loseTitle: '🌌 LOST IN SPACE' });
+  const durationMs = Math.round(performance.now() - startedAt);
+  if (won) {
+    sfx.win();
+    // blast off: jets on full, spiral upward with a fat trail and celebratory bursts
+    const y0 = player.position.y;
+    const x0 = player.position.x;
+    waves.spawn(player.position.clone().setY(player.position.y - 0.95), 0xffd54a, 8, 1);
+    tweens.add(2.6, (t) => {
+      player.position.y = y0 + easeInCubic(t) * 50;
+      player.position.x = x0 + Math.sin(t * Math.PI * 3) * 1.5 * (1 - t);
+      player.rotation.y += 0.12;
+      for (const jet of jets) { jet.visible = true; jet.scale.set(1.3, 1.8, 1.3); }
+      jetDir.set(0, -8, 2);
+      jetTrail.stream(player.position, 6, 0x66b3ff, jetDir, 1.5, 0.7, 0.3);
+      if (Math.random() < 0.15) sparkle.burst(player.position.clone().add(new THREE.Vector3(rand(-4, 4), rand(-2, 4), rand(-4, 4))), 40, [0xffd54a, 0x66b3ff, 0xff6bb5][Math.floor(Math.random() * 3)], 6, 0.9, 0.3);
+    }, { ease: (t) => t });
+  } else {
+    sfx.lose();
+    jets.forEach((j) => (j.visible = false));
+    // keep tumbling away into the void
+    tweens.add(2.5, (t) => {
+      player.position.y -= 18 * (1 / 60) * (1 + t);
+      tumble += 0.09;
+    }, { ease: (t) => t });
+  }
+  setTimeout(() => showResults(hud.message, { won, score: Math.min(score, TOTAL), goal: TOTAL, scoreLabel: 'Stars', durationMs, winTitle: '🏆 CONSTELLATION COMPLETE', loseTitle: '🌌 LOST IN SPACE' }), 1800);
 }
 
 function platformUnder(x: number, z: number): Platform | null {
@@ -208,7 +256,10 @@ function update(dt: number): void {
     if (p.moving) {
       p.x = p.baseX + Math.sin(elapsed * 0.9 + p.phase) * 3.2;
       p.group.position.x = p.x;
+      // bank into the direction of travel
+      p.group.rotation.z = THREE.MathUtils.lerp(p.group.rotation.z, ((p.x - p.prevX) / Math.max(dt, 0.001)) * -0.035, 0.1);
     }
+    p.dip = THREE.MathUtils.lerp(p.dip, 0, 0.12);
   }
   if (grounded && groundedOn?.moving) player.position.x += groundedOn.x - groundedOn.prevX;
 
@@ -251,7 +302,12 @@ function update(dt: number): void {
       sfx.doubleJump();
       flash('#66b3ff', 0.15);
       jetTrail.burst(player.position, 50, 0x66b3ff, 6, 0.6, 0.3);
+      waves.spawn(player.position, 0x66b3ff, 3, 0.45, true);
       playerLight.intensity = 10;
+      // front flip on the jet boost
+      tweens.add(0.6, (t) => (flip = -t * Math.PI * 2), { done: () => (flip = 0) });
+      const at = toScreen(player.position, camera);
+      floatText('JET BOOST', '#66b3ff', at.x, at.y - 12);
     }
     updateJumpsHud();
   }
@@ -271,6 +327,8 @@ function update(dt: number): void {
       sfx.land();
       shake.add(0.12);
       dust.burst(player.position.clone().setY(0.1), 30, 0xcfd8ff, 4, 0.5, 0.6);
+      landing.dip = -0.45; // the deck sinks under the impact and springs back
+      waves.spawn(player.position.clone().setY(0.08), 0x9ad8ff, 3, 0.4);
       updateJumpsHud();
     }
     const thrusting = vy > 0;
@@ -294,7 +352,13 @@ function update(dt: number): void {
     legs[0].rotation.x = stride;
     legs[1].rotation.x = -stride;
   }
-  torso.rotation.x = grounded ? 0 : -0.25;
+  if (player.position.y < -1) tumble += dt * 5; // doomed fall: tumble head over heels
+  roll = THREE.MathUtils.lerp(roll, -dx * 0.18, 0.1);
+  torso.rotation.x = (grounded ? 0 : -0.25) + flip + tumble;
+  torso.rotation.z = roll;
+  const idle = grounded && !moving ? Math.sin(elapsed * 2.2) * 0.03 : 0;
+  const visual = astroVisual();
+  if (visual) visual.position.y = idle;
 
   // Stars
   for (let i = stars.length - 1; i >= 0; i--) {
@@ -302,14 +366,24 @@ function update(dt: number): void {
     s.mesh.position.x = s.platform.x;
     s.mesh.position.y = 1.7 + Math.sin(elapsed * 2.5 + s.phase) * 0.2;
     s.mesh.rotation.y += dt * 2;
+    s.mesh.scale.setScalar(1 + Math.sin(elapsed * 4 + s.phase) * 0.12);
     if (Math.random() < 0.08) sparkle.emit(s.mesh.position.x + rand(-0.5, 0.5), s.mesh.position.y + rand(-0.5, 0.5), s.mesh.position.z + rand(-0.3, 0.3), 0, 0.8, 0, new THREE.Color(0xffd54a), 0.8);
     if (near2d(s.mesh.position.x, s.mesh.position.z, player.position.x, player.position.z, 1.5) && Math.abs(s.mesh.position.y - player.position.y) < 1.6) {
-      scene.remove(s.mesh);
       stars.splice(i, 1);
       score += 1;
       sfx.pickup();
       sparkle.burst(s.mesh.position, 80, 0xffd54a, 6, 0.9, 0.3);
       sparkle.burst(s.mesh.position, 25, 0xffffff, 3, 0.5, 0.2);
+      waves.spawn(s.mesh.position, 0xffd54a, 2.5, 0.45, true);
+      const at = toScreen(s.mesh.position, camera);
+      floatText(`⭐ ${score} / ${TOTAL}`, '#ffd54a', at.x, at.y - 8);
+      const star = s.mesh;
+      const y0 = star.position.y;
+      tweens.add(0.45, (t) => {
+        star.position.y = y0 + t * 3;
+        star.rotation.y += 0.6;
+        star.scale.setScalar(1.3 * (1 - t));
+      }, { done: () => scene.remove(star) });
       hud.stars.textContent = `⭐ ${score} / ${TOTAL}`;
       pulse(hud.stars);
       setBar('progress', score / TOTAL);
@@ -335,14 +409,36 @@ function animate(now: number): void {
   }
   bigPlanet.rotation.y += dt * 0.02;
   moonlet.rotation.y += dt * 0.08;
-  for (const p of platforms) p.group.position.y = Math.sin(elapsed * 0.7 + p.phase) * 0.08;
+  for (const p of platforms) p.group.position.y = Math.sin(elapsed * 0.7 + p.phase) * 0.08 + p.dip;
+  // shooting stars
+  streakTimer -= dt;
+  if (streakTimer <= 0) {
+    launchStreak();
+    streakTimer = rand(1.5, 4.5);
+  }
+  for (const s of streaks) {
+    if (s.life <= 0) continue;
+    s.life -= dt;
+    s.mesh.position.addScaledVector(s.velocity, dt);
+    (s.mesh.material as THREE.MeshStandardMaterial).opacity = Math.min(1, s.life);
+    if (s.life <= 0) s.mesh.visible = false;
+  }
+  if (ended) torso.rotation.x = flip + tumble;
   dust.update(dt);
   jetTrail.update(dt);
   sparkle.update(dt);
+  waves.update(dt);
+  tweens.update(dt);
   sun.position.set(player.position.x + 20, player.position.y + 40, player.position.z + 30);
   sun.target.position.set(player.position.x, 0, player.position.z);
   camTarget.set(player.position.x * 0.6, Math.max(player.position.y, -2) + 9, player.position.z + 15);
-  camera.position.lerp(camTarget, 0.1);
+  if (intro > 0) {
+    // sweep in from the nebula towards the launch deck
+    intro -= dt;
+    const t = easeInOutSine(1 - Math.max(0, intro) / INTRO_SECONDS);
+    camTarget.lerpVectors(new THREE.Vector3(-26, 18, -30), camTarget, t);
+    camera.position.lerp(camTarget, 0.12);
+  } else camera.position.lerp(camTarget, 0.1);
   camera.lookAt(player.position.x * 0.5, Math.max(player.position.y, -2) + 0.5, player.position.z - 7);
   shake.apply(camera, dt);
   pipeline.render();
@@ -351,6 +447,10 @@ function animate(now: number): void {
 requestAnimationFrame(animate);
 updateJumpsHud();
 waitForStart(() => {
-  started = true;
-  startedAt = performance.now();
+  intro = INTRO_SECONDS;
+  announce('LAUNCH!', 'go', 1200);
+  setTimeout(() => {
+    started = true;
+    startedAt = performance.now();
+  }, 900);
 });
