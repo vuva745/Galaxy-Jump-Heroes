@@ -1,1 +1,33 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/><title>Galaxy Jump Heroes</title></head><body><div id="app"><div id="hud">Galaxy Jump Heroes</div><div id="controls"><div class="pad"><button id="up">▲</button><button id="left">◀</button><button id="down">▼</button><button id="right">▶</button></div><button id="action">JUMP</button></div><div id="message" hidden></div></div><script type="module" src="/src/main.ts"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="theme-color" content="#070418"/>
+<title>Galaxy Jump Heroes</title>
+</head>
+<body style="--accent:#ffb84d">
+<div id="app">
+  <div id="hud">
+    <div class="row"><span class="title">GALAXY JUMP HEROES</span><span id="timer">0:00</span><button id="mute" aria-label="Toggle sound">🔊</button></div>
+    <div class="bar"><div class="fill" id="progress"></div></div>
+    <div class="row"><span id="stars">⭐ 0 / 15</span><span id="jumps">JETS ●●</span><span id="height" class="muted">ALT 0 m</span></div>
+  </div>
+  <div id="flash"></div>
+  <div id="message" hidden></div>
+  <div id="controls">
+    <div class="pad"><button id="up">▲</button><button id="left">◀</button><button id="down">▼</button><button id="right">▶</button></div>
+    <button id="action">JUMP</button>
+  </div>
+  <div id="start">
+    <div class="card">
+      <h1>GALAXY JUMP HEROES</h1>
+      <p>Leap across floating platforms drifting through a nebula and collect 15 stars. You have a jetpack for one mid-air boost. Watch out for moving platforms, and do not fall.</p>
+      <p class="keys">Keyboard: arrows / WASD to move · Space to jump (again in mid-air for a jet boost)<br/>Touch: on-screen pad and JUMP</p>
+      <button id="play">▶ LAUNCH</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
