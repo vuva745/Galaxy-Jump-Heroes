@@ -1,0 +1,1 @@
+export function clamp(n:number,min:number,max:number){return Math.max(min,Math.min(max,n))}export function near2d(ax:number,az:number,bx:number,bz:number,r:number){return Math.hypot(ax-bx,az-bz)<r}export function onPlatform(x:number,z:number,platforms:{x:number,z:number}[]){return platforms.some(p=>Math.abs(x-p.x)<=3.5&&Math.abs(z-p.z)<=2.5)}
