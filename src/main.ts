@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { clamp, near2d } from './logic';
+import { showResults } from './leaderboard';
 import './style.css';
+const startedAt = performance.now();
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x171133); scene.fog = new THREE.Fog(0x171133,45,130);
 const camera = new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,200);
 const renderer = new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
@@ -14,7 +16,7 @@ for(const id of Object.keys(held) as Control[]){const el=document.getElementById
 const keymap:Record<string,Control>={ArrowUp:'up',w:'up',ArrowDown:'down',s:'down',ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right',' ':'action',Enter:'action'};
 window.addEventListener('keydown',e=>{const k=keymap[e.key];if(k){e.preventDefault();held[k]=true}});window.addEventListener('keyup',e=>{const k=keymap[e.key];if(k){e.preventDefault();held[k]=false}});window.addEventListener('blur',()=>{for(const k of Object.keys(held) as Control[])held[k]=false});
 const hud=document.querySelector<HTMLElement>('#hud')!;const message=document.querySelector<HTMLElement>('#message')!;let ended=false;
-function finish(won:boolean,score:number){ended=true;message.hidden=false;message.innerHTML=`<h2>${won?'🏆 YOU WIN':'💥 GAME OVER'}</h2><p>Score: ${score}</p><button id="restart">RESTART</button>`;document.getElementById('restart')!.onclick=()=>location.reload()}
+function finish(won:boolean,score:number){ended=true;showResults(message,{won,score:Math.min(score,15),goal:15,scoreLabel:'Stars',durationMs:Math.round(performance.now()-startedAt)})}
 let last=performance.now();function loop(now:number){requestAnimationFrame(loop);const dt=Math.min((now-last)/1000,.05);last=now;if(!ended)update(dt);renderer.render(scene,camera)}
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
 const platforms:{x:number,z:number}[]=[];const stars:THREE.Mesh[]=[];for(let i=0;i<22;i++){const z=-i*5.5,x=Math.sin(i*.8)*3.5;platforms.push({x,z});cube(7,.7,5,0x493fa0+(i%3)*0x090500,x,-.35,z);if(i>0)stars.push(orb(.55,0xffe233,x,1.5,z))}
